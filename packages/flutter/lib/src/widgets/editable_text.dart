@@ -134,7 +134,13 @@ class TextEditingController extends ValueNotifier<TextEditingValue> {
   /// This constructor treats a null [value] argument as if it were
   /// [TextEditingValue.empty].
   TextEditingController.fromValue(TextEditingValue value)
-    : super(value ?? TextEditingValue.empty);
+    : assert(
+        value == null || !value.composing.isValid || value.isComposingRangeValid,
+        'New TextEditingValue $value has an invalid non-empty composing range '
+        '${value.composing}. It is recommended to use a valid composing range, '
+        'even for readonly text fields',
+      ),
+      super(value ?? TextEditingValue.empty);
 
   /// The current string the user is editing.
   String get text => value.text;
@@ -155,12 +161,27 @@ class TextEditingController extends ValueNotifier<TextEditingValue> {
     );
   }
 
+  @override
+  set value(TextEditingValue newValue) {
+    assert(
+      !newValue.composing.isValid || newValue.isComposingRangeValid,
+      'New TextEditingValue $newValue has an invalid non-empty composing range '
+      '${newValue.composing}. It is recommended to use a valid composing range, '
+      'even for readonly text fields',
+    );
+    super.value = newValue;
+  }
+
   /// Builds [TextSpan] from current editing value.
   ///
-  /// By default makes text in composing range appear as underlined.
-  /// Descendants can override this method to customize appearance of text.
+  /// By default makes text in composing range appear as underlined. Descendants
+  /// can override this method to customize appearance of text.
   TextSpan buildTextSpan({TextStyle style , bool withComposing}) {
-    if (!value.composing.isValid || !withComposing) {
+    assert(!value.composing.isValid || !withComposing || value.isComposingRangeValid);
+    // If the composing range is out of range for the current text, ignore it to
+    // preserve the tree integrity, otherwise in release mode a RangeError will
+    // be thrown and this EditableText will be built with a broken subtree.
+    if (!value.isComposingRangeValid || !withComposing) {
       return TextSpan(style: style, text: text);
     }
     final TextStyle composingStyle = style.merge(
@@ -398,6 +419,7 @@ class EditableText extends StatefulWidget {
     this.mouseCursor,
     this.rendererIgnoresPointer = false,
     this.cursorWidth = 2.0,
+    this.cursorHeight,
     this.cursorRadius,
     this.cursorOpacityAnimates = false,
     this.cursorOffset,
@@ -619,6 +641,15 @@ class EditableText extends StatefulWidget {
   /// and the Hebrew phrase to its right, while in a [TextDirection.rtl]
   /// context, the English phrase will be on the right and the Hebrew phrase on
   /// its left.
+  ///
+  /// When LTR text is entered into an RTL field, or RTL text is entered into an
+  /// LTR field, [LRM](https://en.wikipedia.org/wiki/Left-to-right_mark) or
+  /// [RLM](https://en.wikipedia.org/wiki/Right-to-left_mark) characters will be
+  /// inserted alongside whitespace characters, respectively. This is to
+  /// eliminate ambiguous directionality in whitespace and ensure proper caret
+  /// placement. These characters will affect the length of the string and may
+  /// need to be parsed out when doing things like string comparison with other
+  /// text.
   ///
   /// Defaults to the ambient [Directionality], if any.
   ///
@@ -1019,6 +1050,13 @@ class EditableText extends StatefulWidget {
   /// to reverse this behavior.
   /// {@endtemplate}
   final double cursorWidth;
+
+  /// {@template flutter.widgets.editableText.cursorHeight}
+  /// How tall the cursor will be.
+  ///
+  /// If this property is null, [RenderEditable.preferredLineHeight] will be used.
+  /// {@endtemplate}
+  final double cursorHeight;
 
   /// {@template flutter.widgets.editableText.cursorRadius}
   /// How rounded the corners of the cursor should be.
@@ -2267,6 +2305,7 @@ class EditableTextState extends State<EditableText> with AutomaticKeepAliveClien
                 onCaretChanged: _handleCaretChanged,
                 rendererIgnoresPointer: widget.rendererIgnoresPointer,
                 cursorWidth: widget.cursorWidth,
+                cursorHeight: widget.cursorHeight,
                 cursorRadius: widget.cursorRadius,
                 cursorOffset: widget.cursorOffset,
                 selectionHeightStyle: widget.selectionHeightStyle,
@@ -2349,6 +2388,7 @@ class _Editable extends LeafRenderObjectWidget {
     this.onCaretChanged,
     this.rendererIgnoresPointer = false,
     this.cursorWidth,
+    this.cursorHeight,
     this.cursorRadius,
     this.cursorOffset,
     this.paintCursorAboveText,
@@ -2396,6 +2436,7 @@ class _Editable extends LeafRenderObjectWidget {
   final CaretChangedHandler onCaretChanged;
   final bool rendererIgnoresPointer;
   final double cursorWidth;
+  final double cursorHeight;
   final Radius cursorRadius;
   final Offset cursorOffset;
   final bool paintCursorAboveText;
@@ -2439,6 +2480,7 @@ class _Editable extends LeafRenderObjectWidget {
       textHeightBehavior: textHeightBehavior,
       textWidthBasis: textWidthBasis,
       cursorWidth: cursorWidth,
+      cursorHeight: cursorHeight,
       cursorRadius: cursorRadius,
       cursorOffset: cursorOffset,
       paintCursorAboveText: paintCursorAboveText,
@@ -2483,6 +2525,7 @@ class _Editable extends LeafRenderObjectWidget {
       ..obscuringCharacter = obscuringCharacter
       ..obscureText = obscureText
       ..cursorWidth = cursorWidth
+      ..cursorHeight = cursorHeight
       ..cursorRadius = cursorRadius
       ..cursorOffset = cursorOffset
       ..selectionHeightStyle = selectionHeightStyle

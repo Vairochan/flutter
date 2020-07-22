@@ -206,6 +206,7 @@ void main() {
     expect(selectableText.autofocus, false);
     expect(selectableText.dragStartBehavior, DragStartBehavior.start);
     expect(selectableText.cursorWidth, 2.0);
+    expect(selectableText.cursorHeight, isNull);
     expect(selectableText.enableInteractiveSelection, true);
   });
 
@@ -250,6 +251,7 @@ void main() {
     expect(selectableText.autofocus, false);
     expect(selectableText.dragStartBehavior, DragStartBehavior.start);
     expect(selectableText.cursorWidth, 2.0);
+    expect(selectableText.cursorHeight, isNull);
     expect(selectableText.enableInteractiveSelection, true);
   });
 
@@ -2695,7 +2697,7 @@ void main() {
       await tester.pump();
 
       // Plain collapsed selection at the edge of first word. In iOS 12, the
-      // the first tap after a double tap ends up putting the cursor at where
+      // first tap after a double tap ends up putting the cursor at where
       // you tapped instead of the edge like every other single tap. This is
       // likely a bug in iOS 12 and not present in other versions.
       expect(
@@ -3256,6 +3258,7 @@ void main() {
       minLines: 2,
       maxLines: 10,
       cursorWidth: 1.0,
+      cursorHeight: 1.0,
       cursorRadius: Radius.zero,
       cursorColor: Color(0xff00ff00),
       scrollPhysics: ClampingScrollPhysics(),
@@ -3277,6 +3280,7 @@ void main() {
       'textDirection: ltr',
       'textScaleFactor: 1.0',
       'cursorWidth: 1.0',
+      'cursorHeight: 1.0',
       'cursorRadius: Radius.circular(0.0)',
       'cursorColor: Color(0xff00ff00)',
       'selection disabled',
@@ -3493,7 +3497,7 @@ void main() {
       expect(
         tester.getSize(find.byType(SelectableText)),
         // When the strut fontSize is larger than a provided TextStyle, the
-        // the strut's height takes precedence.
+        // strut's height takes precedence.
         const Size(93.0, 54.0),
       );
     },

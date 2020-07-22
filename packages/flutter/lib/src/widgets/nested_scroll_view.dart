@@ -545,7 +545,7 @@ class NestedScrollViewState extends State<NestedScrollView> {
   /// See also:
   ///
   ///  * [outerController], which exposes the [ScrollController] used by the
-  ///    the sliver(s) contained in [NestedScrollView.headerSliverBuilder].
+  ///    sliver(s) contained in [NestedScrollView.headerSliverBuilder].
   ScrollController get innerController => _coordinator._innerController;
 
   /// The [ScrollController] provided to the [ScrollView] in
@@ -918,9 +918,7 @@ class _NestedScrollCoordinator implements ScrollActivityDelegate, ScrollHoldCont
   ScrollActivity createInnerBallisticScrollActivity(_NestedScrollPosition position, double velocity) {
     return position.createBallisticScrollActivity(
       position.physics.createBallisticSimulation(
-        velocity == 0
-          ? position as ScrollMetrics
-          : _getMetrics(position, velocity),
+        _getMetrics(position, velocity),
         velocity,
       ),
       mode: _NestedBallisticScrollActivityMode.inner,
@@ -929,7 +927,8 @@ class _NestedScrollCoordinator implements ScrollActivityDelegate, ScrollHoldCont
 
   _NestedScrollMetrics _getMetrics(_NestedScrollPosition innerPosition, double velocity) {
     assert(innerPosition != null);
-    double pixels, minRange, maxRange, correctionOffset, extra;
+    double pixels, minRange, maxRange, correctionOffset;
+    double extra = 0.0;
     if (innerPosition.pixels == innerPosition.minScrollExtent) {
       pixels = _outerPosition.pixels.clamp(
         _outerPosition.minScrollExtent,
@@ -939,7 +938,6 @@ class _NestedScrollCoordinator implements ScrollActivityDelegate, ScrollHoldCont
       maxRange = _outerPosition.maxScrollExtent;
       assert(minRange <= maxRange);
       correctionOffset = 0.0;
-      extra = 0.0;
     } else {
       assert(innerPosition.pixels != innerPosition.minScrollExtent);
       if (innerPosition.pixels < innerPosition.minScrollExtent) {
@@ -974,8 +972,7 @@ class _NestedScrollCoordinator implements ScrollActivityDelegate, ScrollHoldCont
         if (velocity > 0.0) {
           // shrinking
           extra = _outerPosition.minScrollExtent - _outerPosition.pixels;
-        } else {
-          assert(velocity < 0.0);
+        } else if (velocity < 0.0) {
           // growing
           extra = _outerPosition.pixels - (_outerPosition.maxScrollExtent - _outerPosition.minScrollExtent);
         }

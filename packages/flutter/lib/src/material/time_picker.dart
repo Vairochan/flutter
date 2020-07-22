@@ -20,7 +20,6 @@ import 'curves.dart';
 import 'debug.dart';
 import 'dialog.dart';
 import 'feedback.dart';
-import 'flat_button.dart';
 import 'icon_button.dart';
 import 'icons.dart';
 import 'ink_well.dart';
@@ -29,6 +28,7 @@ import 'input_decorator.dart';
 import 'material.dart';
 import 'material_localizations.dart';
 import 'material_state.dart';
+import 'text_button.dart';
 import 'text_form_field.dart';
 import 'text_theme.dart';
 import 'theme.dart';
@@ -1127,8 +1127,8 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
     TimeOfDay(hour: 22, minute: 0),
   ];
 
-  _TappableLabel _buildTappableLabel(TextTheme textTheme, int value, String label, VoidCallback onTap) {
-    final TextStyle style = textTheme.subtitle1;
+  _TappableLabel _buildTappableLabel(TextTheme textTheme, Color color, int value, String label, VoidCallback onTap) {
+    final TextStyle style = textTheme.subtitle1.copyWith(color: color);
     final double labelScaleFactor = math.min(MediaQuery.of(context).textScaleFactor, 2.0);
     return _TappableLabel(
       value: value,
@@ -1141,10 +1141,11 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
     );
   }
 
-  List<_TappableLabel> _build24HourRing(TextTheme textTheme) => <_TappableLabel>[
+  List<_TappableLabel> _build24HourRing(TextTheme textTheme, Color color) => <_TappableLabel>[
     for (final TimeOfDay timeOfDay in _twentyFourHours)
       _buildTappableLabel(
         textTheme,
+        color,
         timeOfDay.hour,
         localizations.formatHour(timeOfDay, alwaysUse24HourFormat: media.alwaysUse24HourFormat),
         () {
@@ -1153,10 +1154,11 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
       ),
   ];
 
-  List<_TappableLabel> _build12HourRing(TextTheme textTheme) => <_TappableLabel>[
+  List<_TappableLabel> _build12HourRing(TextTheme textTheme, Color color) => <_TappableLabel>[
     for (final TimeOfDay timeOfDay in _amHours)
       _buildTappableLabel(
         textTheme,
+        color,
         timeOfDay.hour,
         localizations.formatHour(timeOfDay, alwaysUse24HourFormat: media.alwaysUse24HourFormat),
         () {
@@ -1165,7 +1167,7 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
       ),
   ];
 
-  List<_TappableLabel> _buildMinutes(TextTheme textTheme) {
+  List<_TappableLabel> _buildMinutes(TextTheme textTheme, Color color) {
     const List<TimeOfDay> _minuteMarkerValues = <TimeOfDay>[
       TimeOfDay(hour: 0, minute: 0),
       TimeOfDay(hour: 0, minute: 5),
@@ -1185,6 +1187,7 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
       for (final TimeOfDay timeOfDay in _minuteMarkerValues)
         _buildTappableLabel(
           textTheme,
+          color,
           timeOfDay.minute,
           localizations.formatMinute(timeOfDay),
           () {
@@ -1200,6 +1203,8 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
     final TimePickerThemeData pickerTheme = TimePickerTheme.of(context);
     final Color backgroundColor = pickerTheme.dialBackgroundColor ?? themeData.colorScheme.onBackground.withOpacity(0.12);
     final Color accentColor = pickerTheme.dialHandColor ?? themeData.colorScheme.primary;
+    final Color primaryLabelColor = MaterialStateProperty.resolveAs(pickerTheme.dialTextColor, <MaterialState>{});
+    final Color secondaryLabelColor = MaterialStateProperty.resolveAs(pickerTheme.dialTextColor, <MaterialState>{MaterialState.selected});
     List<_TappableLabel> primaryLabels;
     List<_TappableLabel> secondaryLabels;
     int selectedDialValue;
@@ -1207,18 +1212,18 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
       case _TimePickerMode.hour:
         if (widget.use24HourDials) {
           selectedDialValue = widget.selectedTime.hour;
-          primaryLabels = _build24HourRing(theme.textTheme);
-          secondaryLabels = _build24HourRing(theme.accentTextTheme);
+          primaryLabels = _build24HourRing(theme.textTheme, primaryLabelColor);
+          secondaryLabels = _build24HourRing(theme.accentTextTheme, secondaryLabelColor);
         } else {
           selectedDialValue = widget.selectedTime.hourOfPeriod;
-          primaryLabels = _build12HourRing(theme.textTheme);
-          secondaryLabels = _build12HourRing(theme.accentTextTheme);
+          primaryLabels = _build12HourRing(theme.textTheme, primaryLabelColor);
+          secondaryLabels = _build12HourRing(theme.accentTextTheme, secondaryLabelColor);
         }
         break;
       case _TimePickerMode.minute:
         selectedDialValue = widget.selectedTime.minute;
-        primaryLabels = _buildMinutes(theme.textTheme);
-        secondaryLabels = _buildMinutes(theme.accentTextTheme);
+        primaryLabels = _buildMinutes(theme.textTheme, primaryLabelColor);
+        secondaryLabels = _buildMinutes(theme.accentTextTheme, secondaryLabelColor);
         break;
     }
 
@@ -1425,8 +1430,9 @@ class _TimePickerInputState extends State<_TimePickerInput> {
                     ),
                 ],
               )),
-              Padding(
-                padding: const EdgeInsets.only(top: 20.0),
+              Container(
+                margin: const EdgeInsets.only(top: 8.0),
+                height: _kTimePickerHeaderControlHeight,
                 child: _StringFragment(timeOfDayFormat: timeOfDayFormat),
               ),
               Expanded(child: Column(
@@ -1527,17 +1533,19 @@ class _HourMinuteTextFieldState extends State<_HourMinuteTextField> {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
+    final TimePickerThemeData timePickerTheme = TimePickerTheme.of(context);
     final ColorScheme colorScheme = theme.colorScheme;
 
-    final InputDecorationTheme inputDecorationTheme = TimePickerTheme.of(context).inputDecorationTheme;
+    final InputDecorationTheme inputDecorationTheme = timePickerTheme.inputDecorationTheme;
     InputDecoration inputDecoration;
     if (inputDecorationTheme != null) {
       inputDecoration = const InputDecoration().applyDefaults(inputDecorationTheme);
     } else {
+      final Color unfocusedFillColor = timePickerTheme.hourMinuteColor ?? colorScheme.onSurface.withOpacity(0.12);
       inputDecoration = InputDecoration(
-        contentPadding: const EdgeInsetsDirectional.only(bottom: 16.0, start: 3.0),
+        contentPadding: EdgeInsets.zero,
         filled: true,
-        fillColor: focusNode.hasFocus ? colorScheme.surface : colorScheme.onSurface.withOpacity(0.12),
+        fillColor: focusNode.hasFocus ? Colors.transparent : unfocusedFillColor,
         enabledBorder: const OutlineInputBorder(
           borderSide: BorderSide(color: Colors.transparent),
         ),
@@ -1561,28 +1569,26 @@ class _HourMinuteTextFieldState extends State<_HourMinuteTextField> {
       hintText: focusNode.hasFocus ? null : _formattedValue,
     );
 
-    return Column(
-      children: <Widget>[
-        SizedBox(
-          height: _kTimePickerHeaderControlHeight,
-          child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
-            child: TextFormField(
-              focusNode: focusNode,
-              textAlign: TextAlign.center,
-              keyboardType: TextInputType.number,
-              style: widget.style.copyWith(color: colorScheme.onSurface),
-              controller: controller,
-              decoration: inputDecoration,
-              validator: widget.validator,
-              onEditingComplete: () => widget.onSavedSubmitted(controller.text),
-              onSaved: widget.onSavedSubmitted,
-              onFieldSubmitted: widget.onSavedSubmitted,
-              onChanged: widget.onChanged,
-            ),
-          ),
+    return SizedBox(
+      height: _kTimePickerHeaderControlHeight,
+      child: MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
+        child: TextFormField(
+          expands: true,
+          maxLines: null,
+          focusNode: focusNode,
+          textAlign: TextAlign.center,
+          keyboardType: TextInputType.number,
+          style: widget.style.copyWith(color: colorScheme.onSurface),
+          controller: controller,
+          decoration: inputDecoration,
+          validator: widget.validator,
+          onEditingComplete: () => widget.onSavedSubmitted(controller.text),
+          onSaved: widget.onSavedSubmitted,
+          onFieldSubmitted: widget.onSavedSubmitted,
+          onChanged: widget.onChanged,
         ),
-      ],
+      ),
     );
   }
 }
@@ -1825,11 +1831,11 @@ class _TimePickerDialogState extends State<_TimePickerDialog> {
           child: ButtonBar(
             layoutBehavior: ButtonBarLayoutBehavior.constrained,
             children: <Widget>[
-              FlatButton(
+              TextButton(
                 onPressed: _handleCancel,
                 child: Text(widget.cancelText ?? localizations.cancelButtonLabel),
               ),
-              FlatButton(
+              TextButton(
                 onPressed: _handleOk,
                 child: Text(widget.confirmText ?? localizations.okButtonLabel),
               ),

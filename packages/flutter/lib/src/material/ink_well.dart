@@ -503,7 +503,7 @@ class InkResponse extends StatelessWidget {
   /// See also:
   ///
   ///  * The Material Design specification for overlay colors and how they
-  ///    to a component's state:
+  ///    match a component's state:
   ///    <https://material.io/design/interaction/states.html#anatomy>.
   final MaterialStateProperty<Color> overlayColor;
 
@@ -1071,7 +1071,10 @@ class _InkResponseState extends State<_InkResponseStateWidget>
     for (final _HighlightType type in _highlights.keys) {
       _highlights[type]?.color = getHighlightColorForType(type);
     }
-    _currentSplash?.color = widget.splashColor ?? Theme.of(context).splashColor;
+
+    const Set<MaterialState> pressed = <MaterialState>{MaterialState.pressed};
+    _currentSplash?.color = widget.overlayColor?.resolve(pressed) ?? widget.splashColor ?? Theme.of(context).splashColor;
+
     final MouseCursor effectiveMouseCursor = MaterialStateProperty.resolveAs<MouseCursor>(
       widget.mouseCursor ?? MaterialStateMouseCursor.clickable,
       <MaterialState>{

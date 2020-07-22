@@ -58,8 +58,10 @@ class WebEntrypointTarget extends Target {
     final bool shouldInitializePlatform = environment.defines[kInitializePlatform] == 'true';
     final bool hasPlugins = environment.defines[kHasWebPlugins] == 'true';
     final Uri importUri = environment.fileSystem.file(targetFile).absolute.uri;
+    // TODO(jonahwilliams): support configuration of this file.
+    const String packageFile = '.packages';
     final PackageConfig packageConfig = await loadPackageConfigWithLogging(
-      environment.projectDir.childFile('.packages'),
+      environment.fileSystem.file(packageFile),
       logger: environment.logger,
     );
 
@@ -151,63 +153,48 @@ class Dart2JSTarget extends Target {
 
   @override
   Future<void> build(Environment environment) async {
-    final String dart2jsOptimization = environment.defines[kDart2jsOptimization];
-    final bool csp = environment.defines[kCspMode] == 'true';
     final BuildMode buildMode = getBuildModeForName(environment.defines[kBuildMode]);
-    final String specPath = globals.fs.path.join(
-      globals.artifacts.getArtifactPath(Artifact.flutterWebSdk), 'libraries.json');
-    final String packageFile = globalPackagesPath;
-    final File outputKernel = environment.buildDir.childFile('app.dill');
-    final File outputFile = environment.buildDir.childFile('main.dart.js');
-    final List<String> dartDefines = decodeDartDefines(environment.defines, kDartDefines);
-    final List<String> extraFrontEndOptions = decodeDartDefines(environment.defines, kExtraFrontEndOptions);
+
+    final List<String> sharedCommandOptions = <String>[
+      globals.artifacts.getArtifactPath(Artifact.engineDartBinary),
+      '--disable-dart-dev',
+      globals.artifacts.getArtifactPath(Artifact.dart2jsSnapshot),
+      '--libraries-spec=${globals.fs.path.join(globals.artifacts.getArtifactPath(Artifact.flutterWebSdk), 'libraries.json')}',
+      ...?decodeDartDefines(environment.defines, kExtraFrontEndOptions),
+      if (buildMode == BuildMode.profile)
+        '-Ddart.vm.profile=true'
+      else
+        '-Ddart.vm.product=true',
+      for (final String dartDefine in decodeDartDefines(environment.defines, kDartDefines))
+        '-D$dartDefine',
+    ];
 
     // Run the dart2js compilation in two stages, so that icon tree shaking can
     // parse the kernel file for web builds.
     final ProcessResult kernelResult = await globals.processManager.run(<String>[
-      globals.artifacts.getArtifactPath(Artifact.engineDartBinary),
-      '--disable-dart-dev',
-      globals.artifacts.getArtifactPath(Artifact.dart2jsSnapshot),
-      '--libraries-spec=$specPath',
-      ...?extraFrontEndOptions,
+      ...sharedCommandOptions,
       '-o',
-      outputKernel.path,
-      '--packages=$packageFile',
-      if (buildMode == BuildMode.profile)
-        '-Ddart.vm.profile=true'
-      else
-        '-Ddart.vm.product=true',
-      for (final String dartDefine in dartDefines)
-        '-D$dartDefine',
+      environment.buildDir.childFile('app.dill').path,
+      '--packages=.packages',
       '--cfe-only',
-      environment.buildDir.childFile('main.dart').path,
+      environment.buildDir.childFile('main.dart').path, // dartfile
     ]);
     if (kernelResult.exitCode != 0) {
       throw Exception(kernelResult.stdout + kernelResult.stderr);
     }
+
+    final String dart2jsOptimization = environment.defines[kDart2jsOptimization];
+    final File outputJSFile = environment.buildDir.childFile('main.dart.js');
+    final bool csp = environment.defines[kCspMode] == 'true';
+
     final ProcessResult javaScriptResult = await globals.processManager.run(<String>[
-      globals.artifacts.getArtifactPath(Artifact.engineDartBinary),
-      '--disable-dart-dev',
-      globals.artifacts.getArtifactPath(Artifact.dart2jsSnapshot),
-      '--libraries-spec=$specPath',
-      ...?extraFrontEndOptions,
-      if (dart2jsOptimization != null)
-        '-$dart2jsOptimization'
-      else
-        '-O4',
-      if (buildMode == BuildMode.profile)
-        '-Ddart.vm.profile=true'
-      else
-        '-Ddart.vm.product=true',
-      for (final String dartDefine in dartDefines)
-        '-D$dartDefine',
-      if (buildMode == BuildMode.profile)
-        '--no-minify',
-      if (csp)
-        '--csp',
+      ...sharedCommandOptions,
+      if (dart2jsOptimization != null) '-$dart2jsOptimization' else '-O4',
+      if (buildMode == BuildMode.profile) '--no-minify',
+      if (csp) '--csp',
       '-o',
-      outputFile.path,
-      environment.buildDir.childFile('app.dill').path,
+      outputJSFile.path,
+      environment.buildDir.childFile('app.dill').path, // dartfile
     ]);
     if (javaScriptResult.exitCode != 0) {
       throw Exception(javaScriptResult.stdout + javaScriptResult.stderr);
@@ -225,7 +212,7 @@ class Dart2JSTarget extends Target {
     );
     final Depfile depfile = depfileService.parseDart2js(
       environment.buildDir.childFile('app.dill.deps'),
-      outputFile,
+      outputJSFile,
     );
     depfileService.writeToFile(
       depfile,
@@ -500,7 +487,7 @@ self.addEventListener("fetch", (event) => {
   if (event.request.url == origin || event.request.url.startsWith(origin + '/#')) {
     key = '/';
   }
-  // If the URL is not the the RESOURCE list, skip the cache.
+  // If the URL is not the RESOURCE list, skip the cache.
   if (!RESOURCES[key]) {
     return event.respondWith(fetch(event.request));
   }
@@ -523,11 +510,11 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener('message', (event) => {
   // SkipWaiting can be used to immediately activate a waiting service worker.
   // This will also require a page refresh triggered by the main worker.
-  if (event.data == 'skipWaiting') {
+  if (event.data === 'skipWaiting') {
     return self.skipWaiting();
   }
 
-  if (event.message = 'downloadOffline') {
+  if (event.message === 'downloadOffline') {
     downloadOffline();
   }
 });

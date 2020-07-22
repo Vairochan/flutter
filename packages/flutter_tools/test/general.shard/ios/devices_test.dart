@@ -11,6 +11,7 @@ import 'package:flutter_tools/src/artifacts.dart';
 import 'package:flutter_tools/src/base/file_system.dart';
 import 'package:flutter_tools/src/base/io.dart';
 import 'package:flutter_tools/src/base/logger.dart';
+import 'package:flutter_tools/src/base/os.dart';
 import 'package:flutter_tools/src/base/platform.dart';
 import 'package:flutter_tools/src/build_info.dart';
 import 'package:flutter_tools/src/cache.dart';
@@ -18,6 +19,7 @@ import 'package:flutter_tools/src/device.dart';
 import 'package:flutter_tools/src/ios/devices.dart';
 import 'package:flutter_tools/src/ios/ios_deploy.dart';
 import 'package:flutter_tools/src/ios/ios_workflow.dart';
+import 'package:flutter_tools/src/ios/iproxy.dart';
 import 'package:flutter_tools/src/ios/mac.dart';
 import 'package:flutter_tools/src/macos/xcode.dart';
 import 'package:mockito/mockito.dart';
@@ -67,7 +69,7 @@ void main() {
     testWithoutContext('successfully instantiates on Mac OS', () {
       IOSDevice(
         'device-123',
-        artifacts: mockArtifacts,
+        iProxy: IProxy.test(logger: logger, processManager: FakeProcessManager.any()),
         fileSystem: mockFileSystem,
         logger: logger,
         platform: macPlatform,
@@ -84,7 +86,7 @@ void main() {
     testWithoutContext('parses major version', () {
       expect(IOSDevice(
         'device-123',
-        artifacts: mockArtifacts,
+        iProxy: IProxy.test(logger: logger, processManager: FakeProcessManager.any()),
         fileSystem: mockFileSystem,
         logger: logger,
         platform: macPlatform,
@@ -98,7 +100,7 @@ void main() {
       ).majorSdkVersion, 1);
       expect(IOSDevice(
         'device-123',
-        artifacts: mockArtifacts,
+        iProxy: IProxy.test(logger: logger, processManager: FakeProcessManager.any()),
         fileSystem: mockFileSystem,
         logger: logger,
         platform: macPlatform,
@@ -112,7 +114,7 @@ void main() {
       ).majorSdkVersion, 13);
       expect(IOSDevice(
         'device-123',
-        artifacts: mockArtifacts,
+        iProxy: IProxy.test(logger: logger, processManager: FakeProcessManager.any()),
         fileSystem: mockFileSystem,
         logger: logger,
         platform: macPlatform,
@@ -126,7 +128,7 @@ void main() {
       ).majorSdkVersion, 10);
       expect(IOSDevice(
         'device-123',
-        artifacts: mockArtifacts,
+        iProxy: IProxy.test(logger: logger, processManager: FakeProcessManager.any()),
         fileSystem: mockFileSystem,
         logger: logger,
         platform: macPlatform,
@@ -140,7 +142,7 @@ void main() {
       ).majorSdkVersion, 0);
       expect(IOSDevice(
         'device-123',
-        artifacts: mockArtifacts,
+        iProxy: IProxy.test(logger: logger, processManager: FakeProcessManager.any()),
         fileSystem: mockFileSystem,
         logger: logger,
         platform: macPlatform,
@@ -157,7 +159,7 @@ void main() {
     testWithoutContext('Supports debug, profile, and release modes', () {
       final IOSDevice device = IOSDevice(
         'device-123',
-        artifacts: mockArtifacts,
+        iProxy: IProxy.test(logger: logger, processManager: FakeProcessManager.any()),
         fileSystem: mockFileSystem,
         logger: logger,
         platform: macPlatform,
@@ -182,7 +184,7 @@ void main() {
           () {
             IOSDevice(
               'device-123',
-              artifacts: mockArtifacts,
+              iProxy: IProxy.test(logger: logger, processManager: FakeProcessManager.any()),
               fileSystem: mockFileSystem,
               logger: logger,
               platform: platform,
@@ -216,16 +218,22 @@ void main() {
       Logger logger;
       IOSDeploy iosDeploy;
       FileSystem mockFileSystem;
+      IProxy iproxy;
 
       IOSDevicePortForwarder createPortForwarder(
           ForwardedPort forwardedPort,
           IOSDevice device) {
+        iproxy = IProxy.test(logger: logger, processManager: FakeProcessManager.any());
         final IOSDevicePortForwarder portForwarder = IOSDevicePortForwarder(
-          dyLdLibEntry: mockCache.dyLdLibEntry,
           id: device.id,
-          iproxyPath: mockArtifacts.getArtifactPath(Artifact.iproxy, platform: TargetPlatform.ios),
           logger: logger,
-          processManager: FakeProcessManager.any(),
+          operatingSystemUtils: OperatingSystemUtils(
+            fileSystem: mockFileSystem,
+            logger: logger,
+            platform: FakePlatform(operatingSystem: 'macos'),
+            processManager: FakeProcessManager.any(),
+          ),
+          iproxy: iproxy,
         );
         portForwarder.addForwardedPorts(<ForwardedPort>[forwardedPort]);
         return portForwarder;
@@ -267,7 +275,7 @@ void main() {
       testWithoutContext('kills all log readers & port forwarders', () async {
         device = IOSDevice(
           '123',
-          artifacts: mockArtifacts,
+          iProxy: IProxy.test(logger: logger, processManager: FakeProcessManager.any()),
           fileSystem: mockFileSystem,
           logger: logger,
           platform: macPlatform,
@@ -337,7 +345,7 @@ void main() {
         name: 'Paired iPhone',
         sdkVersion: '13.3',
         cpuArchitecture: DarwinArch.arm64,
-        artifacts: mockArtifacts,
+        iProxy: IProxy.test(logger: logger, processManager: FakeProcessManager.any()),
         iosDeploy: iosDeploy,
         iMobileDevice: iMobileDevice,
         logger: logger,
@@ -352,7 +360,7 @@ void main() {
         name: 'iPhone 6s',
         sdkVersion: '13.3',
         cpuArchitecture: DarwinArch.arm64,
-        artifacts: mockArtifacts,
+        iProxy: IProxy.test(logger: logger, processManager: FakeProcessManager.any()),
         iosDeploy: iosDeploy,
         iMobileDevice: iMobileDevice,
         logger: logger,
@@ -361,6 +369,19 @@ void main() {
         interfaceType: IOSDeviceInterface.usb,
         vmServiceConnectUri: (String string, {Log log}) async => mockVmService2,
       );
+    });
+
+    testWithoutContext('start polling without Xcode', () async {
+      final IOSDevices iosDevices = IOSDevices(
+        platform: macPlatform,
+        xcdevice: mockXcdevice,
+        iosWorkflow: mockIosWorkflow,
+        logger: logger,
+      );
+      when(mockXcdevice.isInstalled).thenReturn(false);
+
+      await iosDevices.startPolling();
+      verifyNever(mockXcdevice.getAvailableIOSDevices());
     });
 
     testWithoutContext('start polling', () async {
